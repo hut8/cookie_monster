@@ -1,0 +1,13 @@
+
+* Respect expirations listed in database
+
+* Respect the domain/path restrictions
+
+* Refactor the DB -> Cookie translators in each browser:
+** Factor out reading cookies to SqliteCookieSource (module?)
+** Have a normalize_value function in each CookieSource subclass:
+   Takes the hash in normalized key form with browser-format keys
+   Returns the hash with the normalized values
+
+
+* Cookie translators
