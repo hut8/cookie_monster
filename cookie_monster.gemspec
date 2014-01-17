@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
   s.description = "Easily access data in cookies from Firefox and Chrome"
   s.authors     = ["Liam Bowen"]
   s.email       = 'liambowen@gmail.com'
-  s.files       = ["lib/cookie_monster.rb"]
+  s.files       = Dir.glob(File.join(File.dirname(__FILE__), "**/*.rb")) + ['README.md']
   s.homepage    =
     'http://github.com/bowenl2/cookie_monster'
   s.license       = 'MIT'

@@ -1,34 +1,92 @@
 require 'yaml'
 require 'openstruct'
+require 'sqlite3'
+
+require_relative 'browser_descriptor.rb'
 
 class Cookie < OpenStruct
-  attr_accessible(:domain, :expires, :http_only, :name,
-                  :path, :secure, :value)
+  # attr_accessible(:domain, :expires, :http_only, :name,
+  #                 :path, :secure, :value)
 end
 
 class CookieMonster
+
+  ###########################################################################
+  # A "source" is a concrete instance of a CookieSource tied to a database
+  # A "descriptor" contains instructions for the CookieSource to interpret
+  #   a browser's cookie implementation, including paths, formats, etc.
+  ###########################################################################
+
   def initialize(options={})
     @options = options
-    validate_options
+    load_descriptors
     make_source
+  end
+
+  ######################
+  # Serializer methods #
+  ######################
+
+  # The format that a 'Cookie' header uses in HTTP
+  # key-name: value-thereof; other-key: Its value;
+  def http
+    cookies.map { |c| "#{c.name}: #{c.value}" }.join('; ')
+  end
+
+  # def cookies_txt
+
+  # end
+
+  # def mechanize
+
+  # end
+
+  # # Httparty::CookieHash
+  # def httparty_cookie_hash
+
+  # end
+
+  protected
+
+  # DSL method for defining a browser
+  def define(browser, &block)
+    descriptors[browser] = block
   end
 
   private
 
-  def validate_options
-    unless @options[:browser]
-      raise CookieMonsterParameterError('No browser specified')
+  ###################
+  # Descriptor data #
+  ###################
+
+  # Mapping of :browser => Proc { |BrowserDescriptor| ... }
+  def descriptors
+    @descriptors ||= {}
+  end
+
+  # Load all the descriptors in the cookie-sources directory
+  def load_descriptors
+    glob = File.join(File.dirname(__FILE__), 'cookie-sources', '**', '*.rb')
+    Dir.glob[glob].each do |descriptor_file|
+      instance_eval File.read(descriptor_file)
     end
   end
 
+  # Find and invoke the descriptor DSL for use by a CookieSource
+  def invoke_descriptor(browser)
+    descriptor = descriptors[browser]
+    unless descriptor
+      raise CookieMonsterError('Could not find descriptor for #{browser.to_s}')
+    end
+    res = BrowserDescriptor.new
+    descriptor.call(res)
+    res
+  end
+
+  # Make a concrete CookieSource using a loaded descriptor
   def make_source
-    @source = case @options[:browser]
-              when :firefox then FirefoxCookieSource.new
-              when :chrome then ChromeCookieSource.new
-              when :chromium then ChromiumCookieSource.new
-              else nil
-              end
-    raise CookieMonsterException('Invalid :browser specified') unless @source
+    raise CookieMonsterParameterError('No browser specified') unless @options[:browser]
+    @source = invoke_descriptor(@options[:browser])
     if @options[:source_db_path]
       @source.db_path = options[:source_db_path]
     else
@@ -38,72 +96,62 @@ class CookieMonster
   end
 end
 
-class FirefoxCookieSource < CookieSource
-  # The schema from sqlite3
-  # CREATE TABLE moz_cookies (id INTEGER PRIMARY KEY,
-  #                           baseDomain TEXT,
-  #                           appId INTEGER DEFAULT 0,
-  #                           inBrowserElement INTEGER DEFAULT 0,
-  #                           name TEXT,
-  #                           value TEXT,
-  #                           host TEXT,
-  #                           path TEXT,
-  #                           expiry INTEGER,
-  #                           lastAccessed INTEGER,
-  #                           creationTime INTEGER,
-  #                           isSecure INTEGER,
-  #                           isHttpOnly INTEGER,
-  #                           CONSTRAINT moz_uniqueid UNIQUE (name, host, path, appId, inBrowserElement));
-  # CREATE INDEX moz_basedomain ON moz_cookies (baseDomain, appId, inBrowserElement);
 
-  @default_db_path = "~/.mozilla/**/cookies.sqlite"
+module SqliteCookieSourceMethods
+  def each_raw_cookie(filter={})
+    query = "SELECT #{select_clause} FROM #{table}"
+    sqlite_source
+  end
 
-  protected
+  def sqlite_source
+    @sqlite_source ||= SQLite3::Database.new(db_path)
+  end
 
-  def process_row(row)
-    col_map = {
-      baseDomain: :domain,
-      expiry: :expires,
-      isHttpOnly: :http_only,
-      name: :name,
-      path: :path,
-      isSecure: :secure,
-      value: :value
-    }
-    Cookie.new(Hash[row.map { |k,v| [col_map[k], v] }])
+  private
+
+  def select_clause
+    @select_clause ||= self.class.cookie_keys.map do |key|
+      "#{@transformers[key].column_name} AS #{key.to_s}"
+    end.join(', ')
   end
 end
 
-class ChromeCookieSource < CookieSource
-  @default_db_path = "~/.config/google-chrome/**/Cookies"
-end
-
-class ChromiumCookieSource < CookieSource
-  @default_db_path = "~/.config/chromium/**/Cookies"
+class Fixnum
+  def to_bool
+    self != 0
+  end
 end
 
 class CookieSource
-  attr_accessor :db_path
+  include SqliteCookieSourceMethods
 
-  class << self
-    attr_reader :cookie_keys
+  def initialize(descriptor)
+    @descriptor = descriptor
   end
 
-  @cookie_keys = [:domain, :expires, :http_only, :name,
-                  :path,:secure, :shareable, :value]
+  attr_accessor :domain_filter, :path_filter
+  attr_writer :db_path
+  COOKIE_KEYS = [:domain, :expires, :http_only, :name,
+                 :path, :secure, :shareable, :value]
+
+  def db_path
+    @db_path ||= find_db
+  end
 
   def find_db
-    candidates = Dir.glob(File.expand_path(self.class.default_db_path))
+    candidates = Dir.glob(File.expand_path(@descriptor.default_db_path))
     if candidates.length == 1
       candidates.first
     elsif candidates.length > 1
       raise CookieMonsterException("Ambiguous DB match: #{candidates.inspect}")
     else
-      raise CookieMonsterException('Could not find Chromium cookie database')
+      raise CookieMonsterException('Could not find cookie database')
     end
   end
 
-  def process_row
+  ##
+  # Return an Enumerable of Cookies
+  def cookies
 
   end
 end
