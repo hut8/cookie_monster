@@ -1,8 +1,6 @@
 require 'yaml'
 require 'sqlite3'
 
-require_relative 'browser_descriptor.rb'
-
 # CookieMonster implementation
 # This class's public methods are the only ones needed by end users
 class CookieMonster
@@ -160,8 +158,7 @@ class CookieSource
     end
   end
 
-  ##
-  # Return an Enumerable of Cookies
+  # Enumerable of Cookies
   def cookies
 
   end
