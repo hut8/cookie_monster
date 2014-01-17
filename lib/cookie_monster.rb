@@ -13,8 +13,9 @@ class CookieMonster
   ###########################################################################
 
   # Parameters:
-  # :browser => [required] from which browser are we loading cookies?
-  # :descriptor_globs => list of globs passed to Dir[] to be executed as descriptors
+  # :browser          => [required] from which browser are we loading cookies?
+  # :descriptor_globs => list of globs to be executed as descriptors
+  # :database_path    => pass an exact path to the cookie database
   def initialize(options={})
     @options = options
     load_descriptors
@@ -35,9 +36,12 @@ class CookieMonster
     cookies.map { |c| "#{c.name}: #{c.value}" }.join('; ')
   end
 
-  # def cookies_txt
-
-  # end
+  def cookies_txt
+    cookies.map do |c|
+      [c.host, c.host.startwith?(".").to_s.upcase, c.path,
+       c.secure.to_s.upcase, c.expiration.to_i, c.name, c.value].join("\t")
+    end.join("\n")
+  end
 
   # def mechanize
 
