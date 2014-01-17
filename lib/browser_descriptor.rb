@@ -7,11 +7,11 @@ class BrowserDescriptor
     @normalizers = {}
   end
 
-  def default_db_paths(*paths)
-    if paths.length == 0
-      @paths
-    else
+  def default_db_paths(paths=nil)
+    if paths
       @paths = paths
+    else
+      @paths
     end
   end
 

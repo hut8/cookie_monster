@@ -6,6 +6,7 @@ require_relative 'browser_descriptor.rb'
 # CookieMonster implementation
 # This class's public methods are the only ones needed by end users
 class CookieMonster
+  attr_accessor :descriptor_globs
 
   ###########################################################################
   # A "source" is a concrete instance of a CookieSource tied to a database
@@ -15,10 +16,9 @@ class CookieMonster
 
   # Parameters:
   # :browser => [required] from which browser are we loading cookies?
-  # :descriptors => list of files to be executed as descriptors
+  # :descriptor_globs => list of globs passed to Dir[] to be executed as descriptors
   def initialize(options={})
     @options = options
-    validate_options
     load_descriptors
     make_source
   end
@@ -59,12 +59,6 @@ class CookieMonster
 
   private
 
-  def validate_options
-    unless @options[:browser]
-      raise CookieMonsterError('No browser specified')
-    end
-  end
-
   ###################
   # Descriptor data #
   ###################
@@ -76,8 +70,12 @@ class CookieMonster
 
   # Load all the descriptors in the cookie-sources directory
   def load_descriptors
-    glob = File.join(File.dirname(__FILE__), 'cookie-sources', '**', '*.rb')
-    Dir.glob(glob).each do |descriptor_file|
+    if @options[:descriptor_globs]
+      @descriptor_globs = @options[:descriptor_globs]
+    else
+      @descriptor_globs = [File.join(File.dirname(__FILE__), 'cookie-sources', '**', '*.rb')]
+    end
+    Dir.glob(*descriptor_globs).each do |descriptor_file|
       instance_eval File.read(descriptor_file)
     end
   end
@@ -86,7 +84,9 @@ class CookieMonster
   def invoke_descriptor(browser)
     descriptor = descriptors[browser]
     unless descriptor
-      raise CookieMonsterError, "Could not find descriptor for #{browser.to_s}"
+      path_msg = @descriptor_globs.join(', ')
+      raise CookieMonsterError,
+      "Could not find descriptor for #{browser.to_s} (searched #{path_msg})"
     end
     res = BrowserDescriptor.new
     descriptor.call(res)
@@ -95,14 +95,15 @@ class CookieMonster
 
   # Make a concrete CookieSource using a loaded descriptor
   def make_source
-    raise CookieMonsterParameterError, 'No browser specified' unless @options[:browser]
-    @source = invoke_descriptor(@options[:browser])
+    raise CookieMonsterError, 'No browser specified' unless @options[:browser]
+    @descriptor = invoke_descriptor(@options[:browser])
+    @source = CookieSource.new(@descriptor)
     if @options[:source_db_path]
-      @source.db_path = options[:source_db_path]
+      @source.db_path = @options[:source_db_path]
     else
       @source.find_db
     end
-    # At this point we have a concrete cookie source
+    # Rejoice!  @source is now a CookieSource
   end
 end
 
@@ -149,13 +150,13 @@ class CookieSource
   end
 
   def find_db
-    candidates = Dir.glob(File.expand_path(@descriptor.default_db_path))
+    candidates = Dir.glob(File.expand_path(@descriptor.default_db_paths))
     if candidates.length == 1
       candidates.first
     elsif candidates.length > 1
-      raise CookieMonsterException, "Ambiguous DB match: #{candidates.inspect}"
+      raise CookieMonsterError, "Ambiguous DB match: #{candidates.inspect}"
     else
-      raise CookieMonsterException, 'Could not find cookie database'
+      raise CookieMonsterError, "Could not find cookie database (searched #{@descriptor.default_db_paths})"
     end
   end
 
@@ -167,4 +168,3 @@ class CookieSource
 end
 
 class CookieMonsterError < StandardError; end
-class CookieMonsterParameterError < ArgumentError; end

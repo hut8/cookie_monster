@@ -4,7 +4,7 @@ require 'browser_descriptor'
 describe BrowserDescriptor do
   specify "#default_db_paths" do
     subject.default_db_paths 'goatse.cx'
-    expect(subject.default_db_paths).to eq(['goatse.cx'])
+    expect(subject.default_db_paths).to eq('goatse.cx')
   end
 
   specify "#table" do
