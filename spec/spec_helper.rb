@@ -1,3 +1,6 @@
 require 'rspec/autorun'
 require 'pry'
-# require_relative "../lib/cookie_monster.rb"
+
+def fixture_file(path)
+  File.realpath(File.join(File.dirname(__FILE__), '..', 'fixtures', path))
+end

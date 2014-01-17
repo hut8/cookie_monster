@@ -1,5 +1,5 @@
 
-define :firefox do |b|
+define :www_browse do |b|
   # The schema from sqlite3
   # CREATE TABLE moz_cookies (id INTEGER PRIMARY KEY,
   #                           baseDomain TEXT,

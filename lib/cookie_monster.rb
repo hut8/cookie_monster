@@ -1,14 +1,10 @@
 require 'yaml'
-require 'openstruct'
 require 'sqlite3'
 
 require_relative 'browser_descriptor.rb'
 
-class Cookie < OpenStruct
-  # attr_accessible(:domain, :expires, :http_only, :name,
-  #                 :path, :secure, :value)
-end
-
+# CookieMonster implementation
+# This class's public methods are the only ones needed by end users
 class CookieMonster
 
   ###########################################################################
@@ -17,10 +13,18 @@ class CookieMonster
   #   a browser's cookie implementation, including paths, formats, etc.
   ###########################################################################
 
+  # Parameters:
+  # :browser => [required] from which browser are we loading cookies?
+  # :descriptors => list of files to be executed as descriptors
   def initialize(options={})
     @options = options
+    validate_options
     load_descriptors
     make_source
+  end
+
+  def loaded_browsers
+    descriptors.keys
   end
 
   ######################
@@ -28,7 +32,7 @@ class CookieMonster
   ######################
 
   # The format that a 'Cookie' header uses in HTTP
-  # key-name: value-thereof; other-key: Its value;
+  # key-name: value-thereof; other-key: other value;
   def http
     cookies.map { |c| "#{c.name}: #{c.value}" }.join('; ')
   end
@@ -55,6 +59,12 @@ class CookieMonster
 
   private
 
+  def validate_options
+    unless @options[:browser]
+      raise CookieMonsterError('No browser specified')
+    end
+  end
+
   ###################
   # Descriptor data #
   ###################
@@ -67,7 +77,7 @@ class CookieMonster
   # Load all the descriptors in the cookie-sources directory
   def load_descriptors
     glob = File.join(File.dirname(__FILE__), 'cookie-sources', '**', '*.rb')
-    Dir.glob[glob].each do |descriptor_file|
+    Dir.glob(glob).each do |descriptor_file|
       instance_eval File.read(descriptor_file)
     end
   end
@@ -76,7 +86,7 @@ class CookieMonster
   def invoke_descriptor(browser)
     descriptor = descriptors[browser]
     unless descriptor
-      raise CookieMonsterError('Could not find descriptor for #{browser.to_s}')
+      raise CookieMonsterError, "Could not find descriptor for #{browser.to_s}"
     end
     res = BrowserDescriptor.new
     descriptor.call(res)
@@ -85,7 +95,7 @@ class CookieMonster
 
   # Make a concrete CookieSource using a loaded descriptor
   def make_source
-    raise CookieMonsterParameterError('No browser specified') unless @options[:browser]
+    raise CookieMonsterParameterError, 'No browser specified' unless @options[:browser]
     @source = invoke_descriptor(@options[:browser])
     if @options[:source_db_path]
       @source.db_path = options[:source_db_path]
@@ -143,9 +153,9 @@ class CookieSource
     if candidates.length == 1
       candidates.first
     elsif candidates.length > 1
-      raise CookieMonsterException("Ambiguous DB match: #{candidates.inspect}")
+      raise CookieMonsterException, "Ambiguous DB match: #{candidates.inspect}"
     else
-      raise CookieMonsterException('Could not find cookie database')
+      raise CookieMonsterException, 'Could not find cookie database'
     end
   end
 
